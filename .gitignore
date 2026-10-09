@@ -5,4 +5,8 @@ npm-debug.log*
 /dist/
 /dist-final/
 /coverage/
+/tests/
+/scripts/
+/server/config/
+/server/data/
 *.log
