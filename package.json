@@ -1,0 +1,61 @@
+{
+  "name": "sistema-contable",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sistema contable de escritorio con Electron + backend en SQLite",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "nodemon server/index.js",
+    "desktop": "electron .",
+    "desktop:dev": "electron . --inspect",
+    "test": "node --test tests/**/*.test.js",
+    "dist": "npm rebuild better-sqlite3 --runtime=electron --target=44.4.5 --dist-url=https://electronjs.org/headers && electron-builder",
+    "rebuild:electron": "electron-builder install-app-deps",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.11.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^4.2.0",
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3",
+    "node-gyp": "^13.0.2",
+    "nodemon": "^3.1.10"
+  },
+  "build": {
+    "appId": "com.sistemacontable.desktop",
+    "productName": "Sistema Contable",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*",
+      "!**/.git/**",
+      "!**/.vscode/**",
+      "!**/tests/**",
+      "!**/*.md",
+      "!**/*.log",
+      "!**/node_modules/.cache/**"
+    ],
+    "win": {
+      "target": "nsis",
+      "artifactName": "SistemaContable-${version}-setup.exe",
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Sistema Contable",
+      "uninstallDisplayName": "Sistema Contable",
+      "runAfterFinish": true,
+      "perMachine": false
+    }
+  }
+}

@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sistema Contable — Diario, Mayor y Estados Financieros</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.4.21/vue.global.prod.js"></script>
+<link rel="stylesheet" href="src/estilos.css">
+</head>
+<body>
+<div id="app" v-cloak :class="{ 'sidebar-collapsed': sidebarCollapsed }">
+
+  <div v-if="splashVisible" class="splash-screen" @click="cerrarSplash" role="button" tabindex="0" @keydown.enter.prevent="cerrarSplash" @keydown.space.prevent="cerrarSplash">
+    <div class="splash-card">
+      <img class="splash-logo" src="src/assets/whatsapp_image_2026_09_25.jpeg" alt="Logo del sistema contable">
+      <div class="splash-text">Hacer clic en cualquier lugar</div>
+    </div>
+  </div>
+
+  <!-- ============ APLICACIÓN ============ -->
+  <div class="shell">
+    <aside class="lateral no-imp">
+      <div class="marca marca-sin-logo lateral-header">
+        <button class="sidebar-toggle" @click="toggleSidebar" aria-label="Contraer o expandir menú">
+          <span>{{ sidebarCollapsed ? '›' : '‹' }}</span>
+        </button>
+        <span class="lateral-nombre">Libro Mayor<small>Contabilidad general</small></span>
+      </div>
+      <nav>
+        <p class="nav-grupo">Resumen</p>
+        <button :class="{act:vista==='dashboard'}" @click="ir('dashboard')"><span class="ic">◧</span>Panel</button>
+
+        <p class="nav-grupo">Registro</p>
+        <button :class="{act:vista==='catalogo'}" @click="ir('catalogo')"><span class="ic">☰</span>Catálogo de cuentas</button>
+        <button v-if="puede('registrar')" :class="{act:vista==='nuevo'}" @click="ir('nuevo')"><span class="ic">✎</span>Nuevo asiento</button>
+        <button :class="{act:vista==='diario'}" @click="ir('diario')"><span class="ic">▤</span>Libro diario</button>
+        <button :class="{act:vista==='mayor'}" @click="ir('mayor')"><span class="ic">▥</span>Libro mayor</button>
+
+        <p class="nav-grupo">Estados financieros</p>
+        <button :class="{act:vista==='balance'}" @click="ir('balance')"><span class="ic">⚖</span>Balance general</button>
+        <button :class="{act:vista==='resultados'}" @click="ir('resultados')"><span class="ic">↗</span>Estado de resultados</button>
+
+        <p class="nav-grupo">Configuración</p>
+        <button :class="{act:vista==='configuracion'}" @click="ir('configuracion')"><span class="ic">⚙</span>Configuración</button>
+
+      </nav>
+      <div class="lateral-pie">
+        <div class="quien">{{ sesion.nombre }}</div>
+        <div class="rol">Acceso directo</div>
+      </div>
+    </aside>
+
+    <main>
+      <div class="barra no-imp">
+        <div>
+          <h1>{{ titulos[vista] }}</h1>
+          <div class="sub">{{ subtitulos[vista] }}</div>
+        </div>
+        <div class="fila">
+          <div v-if="vistaConPeriodo && vista !== 'balance'">
+            <label class="campo" for="pd">Desde</label>
+            <input id="pd" type="date" v-model="periodo.desde" style="width:150px">
+          </div>
+          <div v-if="vistaConPeriodo && vista !== 'balance'">
+            <label class="campo" for="ph">Hasta</label>
+            <input id="ph" type="date" v-model="periodo.hasta" style="width:150px">
+          </div>
+          <button v-if="vistaImprimible" class="btn ghost" @click="imprimir">Imprimir o guardar PDF</button>
+          <button v-if="vistaImprimible" class="btn ghost" @click="exportar">Descargar Excel</button>
+        </div>
+      </div>
+
+      <!-- ---------- PANEL ---------- -->
+      <section v-if="vista==='dashboard'" class="vista">
+        <div class="ecuacion">
+          <div class="eq">
+            <div class="eq-term">
+              <div class="et">Activo</div>
+              <div class="ev mdebe">{{ dinero(bal.activo) }}</div>
+            </div>
+            <div class="eq-op">=</div>
+            <div class="eq-term">
+              <div class="et">Pasivo</div>
+              <div class="ev mhaber">{{ dinero(bal.pasivo) }}</div>
+            </div>
+            <div class="eq-op">+</div>
+            <div class="eq-term">
+              <div class="et">Capital contable</div>
+              <div class="ev">{{ dinero(bal.capitalTotal) }}</div>
+            </div>
+          </div>
+          <div class="eq-nota">
+            <span class="sello" :class="{mal:!bal.cuadra}">{{ bal.cuadra ? '✓ El balance cuadra' : '✕ El balance no cuadra' }}</span>
+            <span style="color:var(--tinta-suave)" v-if="!bal.cuadra">Diferencia de {{ dinero(Math.abs(bal.activo - bal.pasivo - bal.capitalTotal)) }}.</span>
+            <span style="color:var(--tinta-suave)" v-else>Incluye la utilidad del período de {{ dinero(res.utilidad) }}.</span>
+          </div>
+        </div>
+
+        <div class="rejilla" style="margin-top:16px">
+          <div class="cifra">
+            <div class="et">Ingresos del período</div>
+            <div class="cv" style="color:var(--ok)">{{ dinero(res.ingresos) }}</div>
+            <div class="pie">Cuentas que inician con 5</div>
+          </div>
+          <div class="cifra">
+            <div class="et">Costos y gastos</div>
+            <div class="cv" style="color:var(--alerta)">{{ dinero(res.costosGastos) }}</div>
+            <div class="pie">Cuentas que inician con 4</div>
+          </div>
+          <div class="cifra">
+            <div class="et">{{ res.utilidad >= 0 ? 'Utilidad del período' : 'Pérdida del período' }}</div>
+            <div class="cv">{{ dinero(Math.abs(res.utilidad)) }}</div>
+            <div class="pie">Margen {{ res.margen }}</div>
+          </div>
+          <div class="cifra">
+            <div class="et">Asientos registrados</div>
+            <div class="cv">{{ asientosPeriodo.length }}</div>
+            <div class="pie">{{ cuentasActivas.length }} cuentas activas en el catálogo</div>
+          </div>
+        </div>
+
+        <div class="cols2" style="margin-top:16px">
+          <div class="grafica">
+            <h3>Ingresos y gastos por mes</h3>
+            <svg :viewBox="'0 0 520 240'" style="width:100%;height:auto" role="img" aria-label="Gráfica de ingresos y gastos por mes">
+              <line x1="42" y1="200" x2="510" y2="200" stroke="var(--tinta)" stroke-width="1"></line>
+              <g v-for="(g,i) in grafMeses" :key="'g'+i">
+                <rect :x="g.x" :y="g.yIng" :width="g.w" :height="g.hIng" fill="#2f6b46"></rect>
+                <rect :x="g.x + g.w + 3" :y="g.yGas" :width="g.w" :height="g.hGas" fill="#a3321f"></rect>
+                <text :x="g.x + g.w + 1" y="216" text-anchor="middle" font-size="10" fill="var(--tinta-suave)">{{ g.et }}</text>
+              </g>
+              <text v-for="(t,i) in grafEjeY" :key="'y'+i" x="38" :y="t.y" text-anchor="end" font-size="10" fill="var(--tinta-suave)">{{ t.et }}</text>
+              <text v-if="!grafMeses.length" x="260" y="110" text-anchor="middle" font-size="12" fill="var(--tinta-suave)">Sin movimientos en el período</text>
+            </svg>
+            <div class="leyenda"><span><i style="background:#2f6b46"></i>Ingresos</span><span><i style="background:#a3321f"></i>Costos y gastos</span></div>
+          </div>
+          <div class="panel">
+            <div class="panel-cab"><h3 style="margin:0">Últimos asientos</h3>
+              <button class="btn mini ghost" @click="ir('diario')">Ver el diario</button></div>
+            <div class="scroll">
+              <table>
+                <thead><tr><th>N.º</th><th>Fecha</th><th>Concepto</th><th class="der">Importe</th></tr></thead>
+                <tbody>
+                  <tr v-for="a in ultimosAsientos" :key="a.id">
+                    <td class="cod num">{{ a.numero }}</td>
+                    <td class="num">{{ a.fecha }}</td>
+                    <td>{{ a.concepto }}</td>
+                    <td class="der num">{{ dinero(totalAsiento(a)) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div v-if="!ultimosAsientos.length" class="vacio"><strong>Aún no hay asientos</strong>Registra el primero desde «Nuevo asiento».</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------- CATÁLOGO ---------- -->
+      <section v-if="vista==='catalogo'" class="vista">
+        <div class="reporte-cab"><h2>Catálogo de cuentas</h2><p>{{ empresa }} — emitido el {{ hoyLargo }}</p></div>
+        <div class="panel">
+          <div class="panel-cab">
+            <div class="fila no-imp">
+              <div>
+                <label class="campo" for="bc">Buscar por código o nombre</label>
+                <input id="bc" v-model.trim="filtros.cuenta" placeholder="Ej. 1101 o Caja" style="width:250px">
+              </div>
+              <div>
+                <label class="campo" for="fc">Clasificación</label>
+                <select id="fc" v-model="filtros.tipo" style="width:180px">
+                  <option value="">Todas</option>
+                  <option v-for="t in tipos" :key="t.digito" :value="t.digito">{{ t.digito }} — {{ t.nombre }}</option>
+                </select>
+              </div>
+            </div>
+            <button v-if="puede('admin')" class="btn no-imp" @click="abrirCuenta()">Agregar cuenta</button>
+          </div>
+          <div class="scroll">
+            <table>
+              <thead><tr>
+                <th style="width:110px">Código</th><th>Nombre</th><th>Clasificación</th>
+                <th>Naturaleza</th><th>Estado</th><th class="der">Saldo actual</th>
+                <th v-if="puede('admin')" class="no-imp der">Acciones</th>
+              </tr></thead>
+              <tbody>
+                <tr v-for="c in cuentasFiltradas" :key="c.id">
+                  <td class="num cod">{{ c.codigo }}</td>
+                  <td :class="{inactiva:c.estado!=='Activa'}">{{ c.nombre }}</td>
+                  <td><span class="marca-tipo" :class="'t'+c.codigo[0]">{{ clasificar(c.codigo) }}</span></td>
+                  <td>{{ naturaleza(c.codigo) }}</td>
+                  <td>{{ c.estado }}</td>
+                  <td class="der num">{{ dinero(saldoCuenta(c.codigo)) }}</td>
+                  <td v-if="puede('admin')" class="der no-imp" style="white-space:nowrap">
+                    <button class="btn mini ghost" @click="abrirCuenta(c)">Editar</button>
+                    <button class="btn mini peligro" @click="borrarCuenta(c)">Eliminar</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <div v-if="!cuentasFiltradas.length" class="vacio"><strong>Ninguna cuenta coincide</strong>Cambia el texto de búsqueda o la clasificación.</div>
+          </div>
+        </div>
+        <p style="color:var(--tinta-suave);font-size:.86rem;max-width:70ch">La clasificación se asigna sola con el primer dígito del código: 1 activo, 2 pasivo, 3 capital contable, 4 costos y gastos, 5 ingresos.</p>
+      </section>
+
+      <!-- ---------- NUEVO ASIENTO ---------- -->
+      <section v-if="vista==='nuevo'" class="vista">
+        <div class="panel" style="max-width:1000px">
+          <div class="panel-cab">
+            <h3 style="margin:0">Asiento n.º {{ siguienteNumero }}</h3>
+            <span class="sello" :class="{mal:!borradorCuadra}">
+              {{ borradorCuadra ? '✓ Partida doble verificada' : 'Diferencia ' + dinero(Math.abs(totBorradorDebe - totBorradorHaber)) }}
+            </span>
+          </div>
+          <div class="panel-cpo">
+            <div class="fila" style="margin-bottom:16px">
+              <div style="flex:0 0 170px">
+                <label class="campo" for="nf">Fecha</label>
+                <input id="nf" type="date" v-model="borrador.fecha">
+              </div>
+              <div style="flex:1;min-width:240px">
+                <label class="campo" for="nc">Concepto</label>
+                <input id="nc" v-model.trim="borrador.concepto" placeholder="Ej. Venta de mercadería al contado">
+              </div>
+            </div>
+
+            <div class="scroll">
+              <table>
+                <thead><tr>
+                  <th style="min-width:260px">Cuenta</th><th style="min-width:180px">Detalle</th>
+                  <th class="der" style="width:130px">Debe</th><th class="der" style="width:130px">Haber</th><th></th>
+                </tr></thead>
+                <tbody>
+                  <tr v-for="(l,i) in borrador.lineas" :key="'l'+i">
+                    <td>
+                      <select v-model="l.codigo" :aria-label="'Cuenta de la línea ' + (i+1)">
+                        <option value="">Selecciona una cuenta</option>
+                        <option v-for="c in cuentasActivas" :key="c.id" :value="c.codigo">{{ c.codigo }} — {{ c.nombre }}</option>
+                      </select>
+                    </td>
+                    <td><input v-model.trim="l.detalle" placeholder="Opcional"></td>
+                    <td><input type="text" inputmode="decimal" placeholder="0.00" :value="l.debe" @input="asignarMontoLinea(l, 'debe', $event.target.value)"></td>
+                    <td><input type="text" inputmode="decimal" placeholder="0.00" :value="l.haber" @input="asignarMontoLinea(l, 'haber', $event.target.value)"></td>
+                    <td class="cen"><button class="btn mini peligro" @click="quitarLinea(i)" :disabled="borrador.lineas.length<=2" aria-label="Quitar línea">✕</button></td>
+                  </tr>
+                </tbody>
+                <tfoot>
+                  <tr class="tot">
+                    <td colspan="2">Sumas</td>
+                    <td class="der num mdebe">{{ dinero(totBorradorDebe) }}</td>
+                    <td class="der num mhaber">{{ dinero(totBorradorHaber) }}</td>
+                    <td></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            <div class="fila" style="margin:14px 0 4px;justify-content:space-between">
+              <button class="btn ghost" @click="agregarLinea">Agregar línea</button>
+              <div class="fila">
+                <button class="btn ghost" @click="nuevoBorrador">Descartar</button>
+                <button class="btn" @click="guardarAsiento">Guardar asiento</button>
+              </div>
+            </div>
+
+            <div v-if="errores.length" class="aviso error" style="margin-top:14px">
+              No se guardó el asiento:
+              <ul><li v-for="(e,i) in errores" :key="'e'+i">{{ e }}</li></ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------- CONFIGURACIÓN ---------- -->
+      <section v-if="vista==='configuracion'" class="vista">
+        <div class="panel" style="max-width:900px">
+          <div class="panel-cab">
+            <h3 style="margin:0">Configuración del sistema</h3>
+            <span class="sello">Datos locales</span>
+          </div>
+          <div class="panel-cpo">
+            <p style="margin:0 0 12px;color:var(--tinta-suave)">Los datos del sistema se guardan en SQLite en la carpeta local del equipo. Aquí puedes protegerte ante pérdidas accidentales.</p>
+            <div class="fila" style="gap:12px;flex-wrap:wrap;margin-bottom:16px">
+              <button class="btn" @click="descargarRespaldo">Crear copia de seguridad</button>
+              <label class="btn ghost" style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center">
+                Restaurar respaldo
+                <input type="file" accept=".db,.sqlite,.sqlite3" style="display:none" @change="restaurarRespaldo($event)">
+              </label>
+            </div>
+
+            <div class="panel" style="background:var(--fondo);border-radius:12px;padding:12px 14px;">
+              <div style="font-weight:700;margin-bottom:8px">Ruta de la base de datos</div>
+              <div style="word-break:break-all;color:var(--tinta-suave)">{{ infoConfiguracion?.dbPath || 'Cargando ruta...' }}</div>
+              <div style="margin-top:8px;color:var(--tinta-suave)">Archivo disponible: {{ infoConfiguracion?.existe ? 'Sí' : 'No' }}</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------- LIBRO DIARIO ---------- -->
+      <section v-if="vista==='diario'" class="vista">
+        <div class="reporte-cab"><h2>Libro diario</h2><p>{{ empresa }} — del {{ periodo.desde }} al {{ periodo.hasta }}</p></div>
+        <div class="panel">
+          <div class="panel-cab">
+            <div class="fila no-imp">
+              <div>
+                <label class="campo" for="bd">Buscar concepto o cuenta</label>
+                <input id="bd" v-model.trim="filtros.diario" placeholder="Ej. venta, 1101" style="width:250px">
+              </div>
+              <div>
+                <label class="campo" for="bn">N.º de asiento</label>
+                <input id="bn" v-model.trim="filtros.numero" placeholder="Ej. 3" style="width:120px">
+              </div>
+            </div>
+            <div class="sub">{{ diarioFiltrado.length }} asiento(s) · {{ dinero(totalDiario) }} en movimientos</div>
+          </div>
+          <div class="scroll">
+            <table>
+              <thead><tr>
+                <th style="width:70px">N.º</th><th style="width:110px">Fecha</th>
+                <th style="width:110px">Código</th><th>Cuenta y concepto</th>
+                <th class="der" style="width:130px">Debe</th><th class="der" style="width:130px">Haber</th>
+                <th v-if="puede('admin')" class="no-imp"></th>
+              </tr></thead>
+              <tbody>
+                <template v-for="a in diarioFiltrado" :key="a.id">
+                  <tr v-for="(l,i) in a.lineas" :key="a.id+'-'+i">
+                    <td class="num cod">{{ i===0 ? a.numero : '' }}</td>
+                    <td class="num">{{ i===0 ? a.fecha : '' }}</td>
+                    <td class="num cod">{{ l.codigo }}</td>
+                    <td><span :style="l.haber ? 'padding-left:22px;display:inline-block' : ''">{{ nombreCuenta(l.codigo) }}</span></td>
+                    <td class="der num mdebe">{{ l.debe ? dinero(l.debe) : '' }}</td>
+                    <td class="der num mhaber">{{ l.haber ? dinero(l.haber) : '' }}</td>
+                    <td v-if="puede('admin')" class="no-imp cen">
+                      <template v-if="i===0">
+                        <button class="btn mini ghost" @click="editarAsiento(a)">Actualizar</button>
+                        <button class="btn mini peligro" @click="borrarAsiento(a)">Eliminar</button>
+                      </template>
+                    </td>
+                  </tr>
+                  <tr :key="a.id+'-c'">
+                    <td></td><td></td><td></td>
+                    <td style="color:var(--tinta-suave);font-style:italic">{{ a.concepto }}</td>
+                    <td class="der num" style="border-top:1px solid var(--tinta)">{{ dinero(totalAsiento(a)) }}</td>
+                    <td class="der num" style="border-top:1px solid var(--tinta)">{{ dinero(totalAsiento(a)) }}</td>
+                    <td v-if="puede('admin')" class="no-imp"></td>
+                  </tr>
+                </template>
+              </tbody>
+              <tfoot v-if="diarioFiltrado.length">
+                <tr class="tot">
+                  <td colspan="4">Sumas del período</td>
+                  <td class="der num">{{ dinero(totalDiario) }}</td>
+                  <td class="der num">{{ dinero(totalDiario) }}</td>
+                  <td v-if="puede('admin')" class="no-imp"></td>
+                </tr>
+              </tfoot>
+            </table>
+            <div v-if="!diarioFiltrado.length" class="vacio"><strong>No hay asientos en este período</strong>Amplía las fechas o registra un asiento nuevo.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------- LIBRO MAYOR ---------- -->
+      <section v-if="vista==='mayor'" class="vista">
+        <div class="reporte-cab"><h2>Libro mayor</h2></div>
+        <div class="fila no-imp" style="margin-bottom:16px">
+          <div>
+            <label class="campo" for="bm">Filtrar cuenta</label>
+            <input id="bm" v-model.trim="filtros.mayor" placeholder="Código o nombre" style="width:250px">
+          </div>
+          <div>
+            <label class="campo" for="fm">Clasificación</label>
+            <select id="fm" v-model="filtros.mayorTipo" style="width:180px">
+              <option value="">Todas</option>
+              <option v-for="t in tipos" :key="t.digito" :value="t.digito">{{ t.nombre }}</option>
+            </select>
+          </div>
+        </div>
+
+        <div v-for="m in mayorFiltrado" :key="m.codigo" class="mayor-cuenta">
+          <div class="mayor-cab" @click="toggleMayorCuenta(m.codigo)" style="cursor:pointer;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <button class="btn mini ghost" type="button" aria-label="Mostrar u ocultar detalles" style="min-width:28px;padding:4px 8px;line-height:1;">{{ expandedMayor[m.codigo] ? '▾' : '▸' }}</button>
+              <span class="t">{{ m.codigo }} — {{ m.nombre }}</span>
+              <span class="marca-tipo" :class="'t'+m.codigo[0]" style="margin-left:8px">{{ m.tipo }}</span>
+            </div>
+            <div class="saldo-pill" :class="m.natural==='Deudora' ? 'mdebe' : 'mhaber'">
+              Saldo {{ m.natural.toLowerCase() }}: {{ dinero(m.saldo) }}
+            </div>
+          </div>
+
+          <div v-if="expandedMayor[m.codigo]" class="scroll" style="margin-top:8px;">
+            <table>
+              <thead><tr>
+                <th style="width:110px">Fecha</th><th style="width:70px">Asiento</th><th>Concepto</th>
+                <th class="der" style="width:120px">Debe</th><th class="der" style="width:120px">Haber</th>
+                <th class="der" style="width:130px">Saldo</th>
+              </tr></thead>
+              <tbody>
+                <tr v-for="(mv,i) in m.movimientos" :key="i">
+                  <td class="num">{{ mv.fecha }}</td>
+                  <td class="num cod">{{ mv.numero }}</td>
+                  <td>{{ mv.concepto }}</td>
+                  <td class="der num mdebe">{{ mv.debe ? dinero(mv.debe) : '' }}</td>
+                  <td class="der num mhaber">{{ mv.haber ? dinero(mv.haber) : '' }}</td>
+                  <td class="der num">{{ dinero(mv.acumulado) }}</td>
+                </tr>
+              </tbody>
+              <tfoot><tr class="tot">
+                <td colspan="3">Totales</td>
+                <td class="der num">{{ dinero(m.totalDebe) }}</td>
+                <td class="der num">{{ dinero(m.totalHaber) }}</td>
+                <td class="der num">{{ dinero(m.saldo) }}</td>
+              </tr></tfoot>
+            </table>
+          </div>
+        </div>
+        <div v-if="!mayorFiltrado.length" class="panel vacio"><strong>Sin movimientos para mostrar</strong>El mayor se arma solo con los asientos del diario.</div>
+      </section>
+
+      <!-- ---------- BALANCE GENERAL ---------- -->
+      <section v-if="vista==='balance'" class="vista">
+        <div class="reporte-cab"><h2>Balance general</h2><p>{{ empresa }} — al {{ periodo.hasta }} (expresado en dólares)</p></div>
+        <div class="cols2">
+          <div class="panel">
+            <div class="panel-cab"><h3 style="margin:0">Activo</h3><span class="num">{{ dinero(bal.activo) }}</span></div>
+            <table>
+              <tbody>
+                <tr v-for="c in bal.activos" :key="c.codigo">
+                  <td class="num cod" style="width:110px">{{ c.codigo }}</td>
+                  <td>{{ c.nombre }}</td>
+                  <td class="der num">{{ dinero(c.saldo) }}</td>
+                </tr>
+              </tbody>
+              <tfoot><tr class="tot"><td colspan="2">Total activo</td><td class="der num">{{ dinero(bal.activo) }}</td></tr></tfoot>
+            </table>
+            <div v-if="!bal.activos.length" class="vacio">Sin saldos de activo en el período.</div>
+          </div>
+
+          <div>
+            <div class="panel" style="margin-bottom:16px">
+              <div class="panel-cab"><h3 style="margin:0">Pasivo</h3><span class="num">{{ dinero(bal.pasivo) }}</span></div>
+              <table>
+                <tbody>
+                  <tr v-for="c in bal.pasivos" :key="c.codigo">
+                    <td class="num cod" style="width:110px">{{ c.codigo }}</td>
+                    <td>{{ c.nombre }}</td>
+                    <td class="der num">{{ dinero(c.saldo) }}</td>
+                  </tr>
+                </tbody>
+                <tfoot><tr class="tot"><td colspan="2">Total pasivo</td><td class="der num">{{ dinero(bal.pasivo) }}</td></tr></tfoot>
+              </table>
+              <div v-if="!bal.pasivos.length" class="vacio">Sin saldos de pasivo en el período.</div>
+            </div>
+
+            <div class="panel">
+              <div class="panel-cab"><h3 style="margin:0">Capital contable</h3><span class="num">{{ dinero(bal.capitalTotal) }}</span></div>
+              <table>
+                <tbody>
+                  <tr v-for="c in bal.capital" :key="c.codigo">
+                    <td class="num cod" style="width:110px">{{ c.codigo }}</td>
+                    <td>{{ c.nombre }}</td>
+                    <td class="der num">{{ dinero(c.saldo) }}</td>
+                  </tr>
+                  <tr>
+                    <td class="cod"></td>
+                    <td>{{ res.utilidad >= 0 ? 'Utilidad del período' : 'Pérdida del período' }}</td>
+                    <td class="der num">{{ dinero(res.utilidad) }}</td>
+                  </tr>
+                </tbody>
+                <tfoot><tr class="tot"><td colspan="2">Total capital contable</td><td class="der num">{{ dinero(bal.capitalTotal) }}</td></tr></tfoot>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="ecuacion" style="margin-top:16px">
+          <div class="eq">
+            <div class="eq-term"><div class="et">Total activo</div><div class="ev">{{ dinero(bal.activo) }}</div></div>
+            <div class="eq-op">=</div>
+            <div class="eq-term"><div class="et">Pasivo más capital</div><div class="ev">{{ dinero(bal.pasivo + bal.capitalTotal) }}</div></div>
+          </div>
+          <div class="eq-nota">
+            <span class="sello" :class="{mal:!bal.cuadra}">{{ bal.cuadra ? '✓ Cuadrado' : '✕ Descuadre de ' + dinero(Math.abs(bal.activo - bal.pasivo - bal.capitalTotal)) }}</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------- ESTADO DE RESULTADOS ---------- -->
+      <section v-if="vista==='resultados'" class="vista">
+        <div class="reporte-cab"><h2>Estado de resultados</h2><p>{{ empresa }} — del {{ periodo.desde }} al {{ periodo.hasta }}</p></div>
+        <div class="cols2">
+          <div class="panel">
+            <table>
+              <thead><tr><th colspan="3">Ingresos</th></tr></thead>
+              <tbody>
+                <tr v-for="c in res.detIngresos" :key="c.codigo">
+                  <td class="num cod" style="width:110px">{{ c.codigo }}</td>
+                  <td>{{ c.nombre }}</td>
+                  <td class="der num">{{ dinero(c.saldo) }}</td>
+                </tr>
+                <tr v-if="!res.detIngresos.length"><td colspan="3" class="vacio">Sin ingresos registrados.</td></tr>
+              </tbody>
+              <tfoot><tr class="tot"><td colspan="2">Total de ingresos</td><td class="der num">{{ dinero(res.ingresos) }}</td></tr></tfoot>
+            </table>
+            <table>
+              <thead><tr><th colspan="3">Costos y gastos</th></tr></thead>
+              <tbody>
+                <tr v-for="c in res.detGastos" :key="c.codigo">
+                  <td class="num cod" style="width:110px">{{ c.codigo }}</td>
+                  <td>{{ c.nombre }}</td>
+                  <td class="der num">{{ dinero(c.saldo) }}</td>
+                </tr>
+                <tr v-if="!res.detGastos.length"><td colspan="3" class="vacio">Sin costos ni gastos registrados.</td></tr>
+              </tbody>
+              <tfoot><tr class="tot"><td colspan="2">Total de costos y gastos</td><td class="der num">{{ dinero(res.costosGastos) }}</td></tr></tfoot>
+            </table>
+          </div>
+
+          <div>
+            <div class="ecuacion">
+              <div class="eq">
+                <div class="eq-term"><div class="et">Ingresos</div><div class="ev" style="color:var(--ok)">{{ dinero(res.ingresos) }}</div></div>
+                <div class="eq-op">−</div>
+                <div class="eq-term"><div class="et">Costos y gastos</div><div class="ev" style="color:var(--alerta)">{{ dinero(res.costosGastos) }}</div></div>
+              </div>
+              <div class="eq-nota" style="display:block">
+                <div class="et" style="font-size:.82rem;color:var(--tinta-suave)">{{ res.utilidad >= 0 ? 'Utilidad del período' : 'Pérdida del período' }}</div>
+                <div class="ev" style="font-family:Bitter,serif;font-size:2.1rem">{{ dinero(res.utilidad) }}</div>
+              </div>
+            </div>
+            <div class="grafica" style="margin-top:16px">
+              <h3>Composición del resultado</h3>
+              <svg viewBox="0 0 300 170" style="width:100%;height:auto" role="img" aria-label="Comparación de ingresos, gastos y resultado">
+                <g v-for="(b,i) in grafResultado" :key="'r'+i">
+                  <rect :x="b.x" :y="b.y" :width="b.w" :height="b.h" :fill="b.color"></rect>
+                  <text :x="b.x + b.w/2" y="150" text-anchor="middle" font-size="10" fill="var(--tinta-suave)">{{ b.et }}</text>
+                  <text :x="b.x + b.w/2" y="163" text-anchor="middle" font-size="10" fill="var(--tinta)">{{ b.val }}</text>
+                </g>
+                <line x1="10" y1="135" x2="290" y2="135" stroke="var(--tinta)"></line>
+              </svg>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ============ MODAL CUENTA ============ -->
+  <div v-if="modalCuenta" class="velo" @click.self="modalCuenta=null">
+    <div class="modal">
+      <div class="panel-cab"><h3 style="margin:0">{{ modalCuenta.id ? 'Editar cuenta' : 'Agregar cuenta' }}</h3></div>
+      <div class="panel-cpo">
+        <div style="margin-bottom:12px">
+          <label class="campo" for="mc">Código</label>
+          <input id="mc" v-model.trim="modalCuenta.codigo" placeholder="Ej. 1101" inputmode="numeric">
+        </div>
+        <div style="margin-bottom:12px">
+          <label class="campo" for="mn">Nombre</label>
+          <input id="mn" v-model.trim="modalCuenta.nombre" placeholder="Ej. Caja general">
+        </div>
+        <div class="fila" style="margin-bottom:12px">
+          <div style="flex:1">
+            <label class="campo" for="me">Estado</label>
+            <select id="me" v-model="modalCuenta.estado"><option>Activa</option><option>Inactiva</option></select>
+          </div>
+          <div style="flex:1">
+            <label class="campo">Clasificación asignada</label>
+            <div style="padding:7px 0">
+              <span class="marca-tipo" :class="modalCuenta.codigo ? 't'+modalCuenta.codigo[0] : ''">{{ clasificar(modalCuenta.codigo) || 'Escribe un código' }}</span>
+            </div>
+          </div>
+        </div>
+        <div v-if="modalCuenta.error" class="aviso error" style="margin-bottom:12px">{{ modalCuenta.error }}</div>
+        <div class="fila" style="justify-content:flex-end">
+          <button class="btn ghost" @click="modalCuenta=null">Cancelar</button>
+          <button class="btn" @click="guardarCuenta">Guardar cuenta</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ MODAL USUARIO ============ -->
+  <div v-if="modalUsuario" class="velo" @click.self="modalUsuario=null">
+    <div class="modal">
+      <div class="panel-cab"><h3 style="margin:0">{{ modalUsuario.id ? 'Editar usuario' : 'Agregar usuario' }}</h3></div>
+      <div class="panel-cpo">
+        <div style="margin-bottom:12px">
+          <label class="campo" for="uu">Usuario</label>
+          <input id="uu" v-model.trim="modalUsuario.usuario">
+        </div>
+        <div style="margin-bottom:12px">
+          <label class="campo" for="un">Nombre completo</label>
+          <input id="un" v-model.trim="modalUsuario.nombre">
+        </div>
+        <div class="fila" style="margin-bottom:12px">
+          <div style="flex:1">
+            <label class="campo">Rol</label>
+            <div style="padding:7px 0; font-weight:600; color:var(--tinta)">Administrador</div>
+          </div>
+          <div style="flex:1">
+            <label class="campo" for="up">Contraseña</label>
+            <input id="up" type="password" v-model="modalUsuario.clave" :placeholder="modalUsuario.id ? 'Dejar vacío para conservarla' : 'Mínimo 6 caracteres'">
+          </div>
+        </div>
+        <div v-if="modalUsuario.error" class="aviso error" style="margin-bottom:12px">{{ modalUsuario.error }}</div>
+        <div class="fila" style="justify-content:flex-end">
+          <button class="btn ghost" @click="modalUsuario=null">Cancelar</button>
+          <button class="btn" @click="guardarUsuario">Guardar usuario</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div v-if="brindis" class="brindis" :class="{error:brindis.tipo==='error'}">{{ brindis.texto }}</div>
+</div>
+<script src="src/app.js"></script>
+</body>
+</html>
