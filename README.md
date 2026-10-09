@@ -1,169 +1,167 @@
 # Sistema Contable
 
-Sistema contable de escritorio desarrollado con Electron, Express y SQLite. La aplicación está orientada a uso local y a persistencia de datos en el equipo del usuario, sin depender de un servidor externo.
+Aplicación contable de escritorio para registrar cuentas y asientos, y consultar libros y estados financieros. La aplicación ejecuta una interfaz web local, una API Node.js/Express y una base de datos SQLite en el mismo equipo.
 
-## 1. Objetivo
+Este repositorio contiene **el código fuente seleccionado para la entrega**, no instaladores ni carpetas de compilación. Se excluyen del repositorio las salidas `dist/` y `dist-final/`, las bases de datos locales, las dependencias instaladas y los archivos de pruebas o utilidades de desarrollo. El instalador se puede generar localmente siguiendo la sección [Generar un instalador de Windows](#generar-un-instalador-de-windows).
 
-La solución permite:
+## Estado y alcance de producción
 
-- registrar cuentas contables,
-- generar asientos contables con validación de partida doble,
-- consultar libro diario y libro mayor,
-- calcular balance general y estado de resultados,
-- respaldar y restaurar la base de datos local,
-- distribuir la aplicación como instalador de Windows mediante Electron Builder.
+Esta versión está preparada como aplicación de escritorio local: inicia el backend junto con Electron, usa SQLite persistente, crea el esquema y el catálogo inicial cuando corresponde, valida asientos en el servidor y ofrece funciones de respaldo y restauración.
 
-La base de datos principal es SQLite y no se migra a otro motor en este proyecto.
+“Versión de producción” describe aquí la **versión funcional de la aplicación que se entrega**, en contraste con una compilación o prototipo de interfaz. No significa que haya sido auditada, certificada por una autoridad contable o endurecida para exponerla a redes o a varios usuarios. Antes de operar con información financiera real, se deben considerar las limitaciones de seguridad descritas en [Seguridad y uso responsable](#seguridad-y-uso-responsable).
 
-## 2. Stack tecnológico
+## Funciones
 
-- Frontend: JavaScript + Vue 3 en la capa visual
-- Backend: Node.js + Express
-- Base de datos: SQLite mediante better-sqlite3
-- Desktop: Electron
-- Empaque: electron-builder
-- Pruebas: Node test runner
+- Mantener un catálogo de cuentas.
+- Registrar, editar, eliminar y consultar asientos contables.
+- Rechazar asientos que no cumplan las validaciones de partida doble del backend.
+- Consultar libro diario, libro mayor, balance general y estado de resultados.
+- Consultar el estado de la base de datos y descargar o restaurar una copia SQLite.
+- Ejecutarse localmente sin un servidor externo ni una cuenta de servicio en la nube.
 
-## 3. Arquitectura
+La clasificación usada por los reportes se deriva del primer dígito del código de cuenta:
 
-### 3.1 Capa frontend
+| Primer dígito | Clasificación | Naturaleza |
+|---|---|---|
+| 1 | Activo | Deudora |
+| 2 | Pasivo | Acreedora |
+| 3 | Capital contable | Acreedora |
+| 4 | Costos y gastos | Deudora |
+| 5 | Ingresos | Acreedora |
 
-El frontend vive en:
+## Componentes
 
-- `src/app.js`
-- `src/estilos.css`
-- `index.html`
+| Componente | Ubicación | Función |
+|---|---|---|
+| Interfaz | `index.html`, `src/app.js`, `src/estilos.css` | Interfaz Vue 3, navegación, formularios y reportes. |
+| Proceso de escritorio | `electron/main.js`, `electron/preload.js` | Crea la ventana de Electron, define la ubicación de datos e inicia el backend local. |
+| API y reglas de negocio | `server/index.js` | Endpoints HTTP, validaciones contables y entrega de la interfaz. |
+| Persistencia | `server/db/sqlite.js` | Esquema SQLite, usuario y catálogo iniciales, consultas y operaciones de respaldo. |
+| Configuración de dependencias y empaquetado | `package.json`, `package-lock.json` | Scripts, versiones resueltas de dependencias y configuración de Electron Builder. |
 
-La interfaz usa Vue 3 para renderizar módulos de:
+### Flujo de ejecución
 
-- acceso,
-- catálogo de cuentas,
-- diario contable,
-- mayor,
-- balance general,
-- resultados,
-- configuración y respaldos.
+1. Electron crea la ventana principal y determina el directorio de datos de la aplicación.
+2. El proceso principal inicia Express escuchando en `127.0.0.1` y el puerto 3000. Si el puerto está ocupado, el servidor puede probar los siguientes puertos disponibles.
+3. El servidor abre o crea la base SQLite, inicializa las tablas y, si corresponde, agrega el usuario y catálogo contable iniciales.
+4. Electron carga la interfaz desde el servidor local. La interfaz consulta la API para mostrar y modificar cuentas y asientos.
+5. SQLite guarda los datos en disco; no se necesita un proceso de base de datos separado.
 
-### 3.2 Capa backend
+## Requisitos
 
-El backend se encuentra en:
+- Windows para ejecutar la aplicación de escritorio y generar el instalador descrito aquí.
+- Node.js y npm para ejecutar desde el código fuente.
+- Conexión a Internet durante la instalación inicial de dependencias.
 
-- `server/index.js`
+La versión de Electron y las dependencias están declaradas en `package.json` y fijadas mediante `package-lock.json`. `better-sqlite3` incluye un módulo nativo; por eso, las dependencias deben instalarse o reconstruirse para el entorno de Electron indicado por el proyecto.
 
-Incluye endpoints para:
+## Instalación y ejecución desde el código fuente
 
-- salud del servicio (`/api/health`),
-- autenticación (`/api/auth/login`),
-- usuarios,
-- cuentas,
-- asientos,
-- respaldo y restauración,
-- consulta de estado de la base de datos.
+Abre PowerShell en la carpeta que contiene `package.json` y ejecuta:
 
-### 3.3 Capa de persistencia
-
-La capa de datos está en:
-
-- `server/db/sqlite.js`
-
-Responsabilidades:
-
-- definir la ruta de la base SQLite,
-- inicializar tablas,
-- crear el usuario administrador inicial,
-- sembrar el catálogo contable base,
-- listar y modificar cuentas,
-- insertar, actualizar y consultar asientos,
-- respaldar y restaurar la base de datos,
-- mantener la conexión SQLite abierta para la API.
-
-### 3.4 Capa desktop
-
-La integración con Electron está en:
-
-- `electron/main.js`
-
-Responsabilidades:
-
-- crear la ventana principal,
-- preparar variables de entorno de la app,
-- iniciar el backend local dentro de la aplicación,
-- abrir la interfaz en localhost,
-- mantener el proceso del servidor vivo durante la sesión de escritorio.
-
-## 4. Estructura del proyecto
-
-```text
-sistema-contable/
-├─ electron/
-│  ├─ main.js
-│  └─ preload.js
-├─ server/
-│  ├─ db/
-│  │  └─ sqlite.js
-│  ├─ data/
-│  ├─ config/
-│  └─ index.js
-├─ src/
-│  ├─ app.js
-│  ├─ estilos.css
-│  └─ assets/
-├─ tests/
-│  └─ api.test.js
-├─ scripts/
-│  ├─ cargar_asientos_extra.js
-│  └─ verify_backup_restore.js
-├─ data/
-│  └─ sistema_contable.db
-├─ .env.example
-├─ package.json
-├─ index.html
-├─ README.md
-└─ .gitignore
-```
-
-## 5. Requisitos
-
-- Node.js 18+ recomendado
-- npm
-- Windows para la generación del instalador final
-- Electron 44.4.5 definido en el proyecto
-
-## 6. Instalación y ejecución
-
-### 6.1 Instalar dependencias
-
-```bash
+```powershell
 npm install
-```
-
-### 6.2 Ejecutar la API directamente
-
-```bash
-npm start
-```
-
-La API queda disponible en:
-
-```text
-http://127.0.0.1:3000
-```
-
-### 6.3 Ejecutar la aplicación con Electron
-
-```bash
 npm run desktop
 ```
 
-### 6.4 Ejecutar pruebas
+`npm run desktop` abre la aplicación de escritorio desde el código fuente. **No genera ni publica un instalador.**
 
-```bash
-npm test
+Si aparece un error de `better-sqlite3` indicando que el módulo se compiló para otra versión de Node/Electron, reconstruye las dependencias para Electron y vuelve a ejecutar:
+
+```powershell
+npm run rebuild:electron
+npm run desktop
 ```
 
-## 7. Variables de entorno
+### Ejecutar solo el servidor y la interfaz en el navegador
 
-Archivo base:
+```powershell
+npm start
+```
+
+Después abre `http://127.0.0.1:3000`. El servidor se ejecuta en primer plano; para detenerlo, vuelve a la terminal y presiona `Ctrl+C`.
+
+## Datos y persistencia
+
+La aplicación de escritorio guarda su base de datos en el directorio de datos de Electron (`app.getPath('userData')`), con el nombre `sistema_contable.db`. En Windows, el directorio suele estar bajo `%APPDATA%`, dentro de la carpeta correspondiente a la aplicación.
+
+Al ejecutar el servidor directamente con `npm start`, la ruta predeterminada es `data/sistema_contable.db`, relativa al proyecto. El directorio y la base se crean si no existen. También se puede indicar otra ruta mediante la variable `SQLITE_DB_PATH`.
+
+El modo WAL de SQLite puede crear archivos auxiliares `-wal` y `-shm` junto a la base mientras está en uso. No los borres ni copies la base activa manualmente como método de respaldo; utiliza la función de respaldo de la aplicación.
+
+El catálogo contable inicial solo se siembra cuando la tabla de cuentas está vacía. El sistema también crea el usuario inicial si todavía no existe:
+
+- Usuario: `admin`
+- Contraseña inicial: `admin123`
+
+No reutilices esa contraseña en un entorno con datos reales. Revisa además las limitaciones de autenticación en la siguiente sección.
+
+## Seguridad y uso responsable
+
+La aplicación está diseñada para uso local. El servidor escucha en `127.0.0.1` de forma predeterminada y no debe exponerse directamente a Internet ni a una red compartida.
+
+**Limitación importante de la implementación actual:** aunque existe un endpoint de inicio de sesión, la interfaz no lo utiliza como control de acceso y los endpoints de cuentas, asientos, usuarios y respaldos no verifican una sesión autenticada. El usuario inicial tampoco debe considerarse una protección efectiva para los datos. El hash de contraseñas implementado con SHA-256 y sal tampoco sustituye un algoritmo moderno de derivación de claves para contraseñas.
+
+Por tanto, esta versión no debe tratarse como un sistema con autenticación o autorización robustas. Antes de almacenar información financiera sensible o habilitar acceso para más de una persona, se requiere implementar y verificar controles de autenticación/autorización en el servidor, mejorar el almacenamiento de contraseñas y revisar el tratamiento de errores, auditoría y permisos del equipo. El uso local reduce la exposición de red, pero no reemplaza esos controles ni las políticas de respaldo y acceso del equipo.
+
+## Respaldo y restauración
+
+En la sección de configuración de la aplicación se puede:
+
+- consultar la ruta y el estado de la base de datos;
+- descargar un respaldo SQLite;
+- restaurar la base desde un archivo de respaldo.
+
+Antes de restaurar, guarda una copia independiente de la base actual y confirma que el archivo seleccionado corresponde al sistema. La restauración reemplaza los datos locales existentes. Mantén copias periódicas en un lugar seguro, separado del equipo; valida también que puedas restaurarlas.
+
+## Reglas contables aplicadas por el servidor
+
+Al guardar o actualizar un asiento, la API comprueba, entre otras condiciones:
+
+- fecha y concepto obligatorios;
+- un mínimo de dos líneas y al menos dos líneas con importe;
+- igualdad entre el total del debe y el total del haber, con tolerancia de redondeo;
+- importes no negativos;
+- que una línea no registre simultáneamente debe y haber.
+
+Los reportes se calculan a partir de los asientos guardados. El sistema no sustituye la revisión de un profesional contable ni determina por sí mismo el cumplimiento de normas fiscales o contables específicas.
+
+## API local
+
+El servidor incluye, entre otros, estos endpoints:
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `GET` | `/api/health` | Estado del servicio. |
+| `POST` | `/api/auth/login` | Comprobación de credenciales; no protege actualmente el resto de la API. |
+| `GET`, `POST`, `PUT`, `DELETE` | `/api/usuarios` | Operaciones de usuarios. |
+| `GET`, `POST`, `PUT`, `DELETE` | `/api/cuentas` | Operaciones del catálogo de cuentas. |
+| `GET`, `POST`, `PUT`, `DELETE` | `/api/asientos` | Operaciones de asientos contables. |
+| `GET` | `/api/reportes/mayor` | Reporte de libro mayor. |
+| `GET` | `/api/reportes/balance` | Reporte de balance general. |
+| `GET` | `/api/reportes/resultados` | Estado de resultados. |
+| `GET` | `/api/configuracion/estado` | Ruta y estado de la base local. |
+| `GET` | `/api/configuracion/respaldo` | Descarga de un respaldo SQLite. |
+| `POST` | `/api/configuracion/restaurar` | Restaura un archivo SQLite enviado como binario. |
+
+La API está pensada para el uso de la interfaz local, no como servicio público.
+
+## Generar un instalador de Windows
+
+El instalador es un artefacto generado; **no forma parte del código fuente publicado en GitHub**. En Windows, desde la raíz del proyecto:
+
+```powershell
+npm install
+npm run dist
+```
+
+Electron Builder coloca el resultado en `dist/`; el nombre definido en la configuración actual es `SistemaContable-1.0.0-setup.exe`. Las carpetas de salida están ignoradas por Git y no deben añadirse al repositorio como archivos fuente.
+
+Antes de distribuir un instalador, verifica la compilación en un equipo limpio, la instalación y desinstalación, el primer inicio, la persistencia de datos, el respaldo y la restauración. Distribuye el instalador por un canal adecuado y comunica su versión y suma de verificación a quienes lo reciban.
+
+## Configuración
+
+`.env.example` documenta las variables de entorno usadas al iniciar el servidor directamente:
 
 ```env
 PORT=3000
@@ -171,154 +169,10 @@ DB_TYPE=sqlite
 SQLITE_DB_PATH=./data/sistema_contable.db
 ```
 
-En la versión empaquetada, la base se guarda bajo el perfil del usuario, típicamente:
+Para usar variables locales, crea `.env` a partir de ese ejemplo y no publiques el archivo `.env`. Al ejecutar Electron, `electron/main.js` establece las rutas y el puerto del backend local.
 
-```text
-%APPDATA%\Sistema Contable\data\sistema_contable.db
-```
+## Alcance del repositorio
 
-## 8. Modelo de datos
+El repositorio está preparado para contener fuentes y archivos necesarios para instalar dependencias y ejecutar o empaquetar la aplicación. `.gitignore` excluye bases de datos y archivos locales (`data/`), dependencias instaladas (`node_modules/`), artefactos generados (`dist/`, `dist-final/`), pruebas y scripts auxiliares. El archivo `.env.example` es una plantilla; no contiene configuración privada.
 
-Las tablas principales son:
-
-- `users`
-  - id, usuario, nombre, rol, sal, hash, creado
-- `cuentas`
-  - id, codigo, nombre, estado
-- `asientos`
-  - id, numero, fecha, concepto, registradoPor, registradoEn
-- `asiento_lineas`
-  - id, asiento_id, codigo, detalle, debe, haber
-
-### Regla contable central
-
-La validación de partida doble se realiza en el backend con estas condiciones:
-
-- la suma del debe debe ser igual a la suma del haber,
-- cada línea puede tener solo debe o solo haber,
-- importe negativo no es permitido,
-- cada asiento debe incluir al menos dos cuentas con movimiento.
-
-## 9. Endpoints principales
-
-### Health
-
-```http
-GET /api/health
-```
-
-Respuesta:
-
-```json
-{
-  "ok": true,
-  "service": "sistema-contable",
-  "timestamp": "2026-09-28T00:00:00.000Z"
-}
-```
-
-### Autenticación
-
-```http
-POST /api/auth/login
-```
-
-### Usuarios
-
-```http
-GET /api/usuarios
-POST /api/usuarios
-PUT /api/usuarios/:id
-DELETE /api/usuarios/:id
-```
-
-### Cuentas
-
-```http
-GET /api/cuentas
-POST /api/cuentas
-PUT /api/cuentas/:id
-DELETE /api/cuentas/:id
-```
-
-### Asientos
-
-```http
-GET /api/asientos
-POST /api/asientos
-PUT /api/asientos/:id
-DELETE /api/asientos/:id
-```
-
-### Configuración y respaldos
-
-```http
-GET /api/configuracion/estado
-GET /api/configuracion/respaldo
-POST /api/configuracion/restaurar
-```
-
-## 10. Reglas contables implementadas
-
-La lógica contable ya está integrada en la aplicación y en el backend:
-
-- clasificación automática por primer dígito de cuenta,
-- validación de partida doble,
-- mayorización por cuenta,
-- cálculo de saldo por naturaleza de la cuenta,
-- balance general,
-- estado de resultados,
-- estructura de asientos con líneas de cargo y abono.
-
-## 11. Empaque con Electron
-
-El proyecto incluye la configuración de `electron-builder` en `package.json`.
-
-Comando:
-
-```bash
-npm run dist
-```
-
-Esto genera el instalador Windows en:
-
-```text
-dist\SistemaContable-1.0.0-setup.exe
-```
-
-La aplicación desktop empaqueta la aplicación junto con el backend y guarda la base de datos local en el perfil del usuario, evitando depender de Node.js instalado globalmente en otra máquina.
-
-## 12. Pruebas
-
-El proyecto cuenta con pruebas reales del comportamiento contable y de respaldos:
-
-- salud del servicio,
-- catálogo contable,
-- validación de asientos,
-- rescate de balanza,
-- respaldo y restauración,
-- cálculo de saldo.
-
-Comando:
-
-```bash
-npm test
-```
-
-## 13. Consideraciones de diseño
-
-- Se mantiene SQLite como base de datos local y nativa.
-- La integración con Electron prioriza la persistencia local del usuario.
-- La lógica contable no se reemplaza por una capa externa.
-- El proyecto se mantiene orientado a ejecución local, sin requerir infraestructura adicional.
-
-## 14. Usuario inicial
-
-Usuario por defecto:
-
-- usuario: `admin`
-- contraseña: `admin123`
-
-## 15. Nota final
-
-Este proyecto está diseñado para ser una aplicación contable local con escritorio, backend propio y persistencia SQLite. La documentación técnica aquí descrita refleja la implementación actual del repositorio y no contempla migración de base de datos ni cambio de motor de almacenamiento.
+Las pruebas automatizadas y utilidades de desarrollo no están incluidas en esta entrega de fuentes de producción. No se debe interpretar la ausencia de esos archivos como evidencia de una auditoría o certificación de calidad.
